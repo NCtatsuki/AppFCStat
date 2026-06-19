@@ -29,7 +29,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDczOUUwRjRCODhBMzE1MzYKUldRMkZhT0lTdytlYy9aS3paR2gzZXlJYTJNQ2FpK0ZhL3ZkalFMMEtjNnh3VTVRZUplbVpkRE4K",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI3NUY5QTY3RTc1RjE3MApSV1J3OFhWK3B2bDFDNVdFUHZERHBvTE9rYjFBQjNHV29ZVjl3YlJNbTdzOERxUGhzcTRsQkhtWAo=",
       "endpoints": [
         "https://github.com/NCtatsuki/AppFCStat/releases/latest/download/latest.json"
       ]
