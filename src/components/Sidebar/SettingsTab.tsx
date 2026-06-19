@@ -200,7 +200,7 @@ export function SettingsTab() {
           "check_for_update", { currentVersion: appVersion }
         );
         if (result.available) {
-          const url = `https://github.com/Zoran-n/proclubs-tauri/releases/latest`;
+          const url = `https://github.com/NCtatsuki/AppFCStat/releases/latest`;
           setPendingManualUrl(url);
           setUpdateInfo(result.version ?? null, result.notes ?? null);
           setUpdateAvailable(true);

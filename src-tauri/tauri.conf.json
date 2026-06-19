@@ -31,7 +31,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDczOUUwRjRCODhBMzE1MzYKUldRMkZhT0lTdytlYy9aS3paR2gzZXlJYTJNQ2FpK0ZhL3ZkalFMMEtjNnh3VTVRZUplbVpkRE4K",
       "endpoints": [
-        "https://github.com/Zoran-n/ProStatsClub/releases/latest/download/latest.json"
+        "https://github.com/NCtatsuki/AppFCStat/releases/latest/download/latest.json"
       ]
     }
   },

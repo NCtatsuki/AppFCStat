@@ -9,7 +9,7 @@
 
 ## 🔄 Migration du système de mise à jour automatique
 
-- **Nouveau dépôt de release** : l'updater pointe désormais vers `github.com/Zoran-n/ProStatsClub`
+- **Nouveau dépôt de release** : l'updater pointe désormais vers `github.com/NCtatsuki/AppFCStat`
 - **Format Tauri Updater v2 complet** : le workflow CD génère désormais le `latest.json` avec l'archive `.nsis.zip` signée (et non plus le `.exe` NSIS direct), conforme au protocole de mise à jour automatique
 - Les artefacts uploadés par release : `.exe` (installeur manuel) + `.nsis.zip` + `.nsis.zip.sig` + `latest.json`
 

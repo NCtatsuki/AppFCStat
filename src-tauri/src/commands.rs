@@ -213,7 +213,7 @@ pub async fn check_for_update(current_version: String) -> Result<serde_json::Val
         .build()
         .map_err(|e| e.to_string())?;
     let resp = client
-        .get("https://github.com/Zoran-n/proclubs-tauri/releases/latest/download/latest.json")
+        .get("https://github.com/NCtatsuki/AppFCStat/releases/latest/download/latest.json")
         .header("User-Agent", "ProClubs-Stats-Updater")
         .send()
         .await
