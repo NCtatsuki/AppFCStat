@@ -34,10 +34,8 @@ export function ToastContainer() {
 }
 
 function ToastItem({ toast, onDone }: { toast: ToastMessage; onDone: () => void }) {
-  useEffect(() => {
-    const id = setTimeout(onDone, 3500);
-    return () => clearTimeout(id);
-  }, [onDone]);
+  // Trilogy Design System: Une alerte ne doit pas disparaître automatiquement.
+  // L'utilisateur doit la fermer manuellement.
 
   const color = COLORS[toast.type];
   return (
@@ -50,8 +48,19 @@ function ToastItem({ toast, onDone }: { toast: ToastMessage; onDone: () => void 
       animation: "fadeSlideIn 0.15s ease-out",
       pointerEvents: "auto",
       maxWidth: 300,
+      position: "relative",
+      paddingRight: 32, // place pour le bouton fermer
     }}>
       {toast.message}
+      <button onClick={onDone}
+        aria-label={`Fermer l'alerte ${toast.type}`}
+        style={{
+          position: "absolute", top: 8, right: 8, background: "none",
+          border: "none", color: "inherit", cursor: "pointer", opacity: 0.7
+        }}>
+        ✕
+        <span className="sr-only">Fermer {toast.type}</span>
+      </button>
     </div>
   );
 }
@@ -74,12 +83,7 @@ function RecordAlertItem({ record }: { record: RecordEntry }) {
   const { removeRecordAlert, discordWebhook, addToast } = useAppStore();
   const [sending, setSending] = useState(false);
 
-  useEffect(() => {
-    const id = setTimeout(() => {
-      removeRecordAlert(record.matchId, record.type);
-    }, 10000); // 10s auto-dismiss
-    return () => clearTimeout(id);
-  }, [record, removeRecordAlert]);
+  // Trilogy Design System: L'alerte record ne disparaît plus automatiquement.
 
   const share = async () => {
     if (!discordWebhook) return;
@@ -112,6 +116,7 @@ function RecordAlertItem({ record }: { record: RecordEntry }) {
       <button onClick={() => removeRecordAlert(record.matchId, record.type)}
         style={{ position: "absolute", top: 8, right: 8, background: "none", border: "none", color: "var(--muted)", cursor: "pointer" }}>
         ✕
+        <span className="sr-only">Fermer Record</span>
       </button>
       
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>

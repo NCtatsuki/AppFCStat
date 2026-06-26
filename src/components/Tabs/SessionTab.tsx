@@ -10,7 +10,7 @@ import {
 } from "recharts";
 import { useAppStore } from "../../store/useAppStore";
 import { useSession } from "../../hooks/useSession";
-import { Badge } from "../UI/Badge";
+import { Tag } from "../UI/Tag";
 import { ExportModal } from "../Modals/ExportModal";
 import type { Match, Session as SessionType } from "../../types";
 import { generateSessionSummary } from "../../utils/aiEngine";
@@ -474,7 +474,7 @@ export function SessionTab() {
             return (
               <div key={m.matchId} style={{ display: "flex", alignItems: "center", gap: 8,
                 padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
-                <Badge result={r} />
+                <Tag result={r} />
                 <span style={{ fontSize: 12, color: "var(--text)" }}>{String(goals)} {t("session.goalCount")}</span>
                 <span style={{ fontSize: 11, color: "var(--muted)", marginLeft: "auto" }}>{m.matchType}</span>
               </div>
@@ -1249,7 +1249,7 @@ export function SessionTab() {
                         <div key={m.matchId ?? i} style={{ display: "flex", alignItems: "center", gap: 8,
                           padding: "7px 10px", background: "var(--bg)", borderRadius: 6,
                           border: "1px solid var(--border)" }}>
-                          <Badge result={r} />
+                          <Tag result={r} />
                           <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 17,
                             color: "var(--text)", letterSpacing: "0.05em" }}>
                             {ourGoals} – {oppGoals}

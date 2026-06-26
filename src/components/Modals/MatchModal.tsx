@@ -117,7 +117,7 @@ export function MatchModal({ match, clubId, onClose }: { match: Match; clubId: s
 
   const events = extractMatchEvents(match, clubId);
 
-  const resultBadge = isVictory
+  const resultTag = isVictory
     ? { label: t("match.win").toUpperCase(),  color: "var(--green)" }
     : isDraw
     ? { label: t("match.draw").toUpperCase(), color: "var(--gold)" }
@@ -164,7 +164,7 @@ export function MatchModal({ match, clubId, onClose }: { match: Match; clubId: s
       await sendDiscordWebhook(discordWebhook, [{
         title: `${myGoals} — ${oppGoals}  ·  vs ${oppName}`,
         color,
-        description: `${formatDate(match.timestamp, locale)}  **${resultBadge.label}**`,
+        description: `${formatDate(match.timestamp, locale)}  **${resultTag.label}**`,
         fields,
         footer: { text: "ProClubs Stats" },
       }]);
@@ -212,13 +212,13 @@ export function MatchModal({ match, clubId, onClose }: { match: Match; clubId: s
           </div>
 
           <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-bold tracking-widest mb-3"
-            style={{ background: resultBadge.color + "22", color: resultBadge.color, border: `1px solid ${resultBadge.color}44` }}>
-            {resultBadge.label}
+            style={{ background: resultTag.color + "22", color: resultTag.color, border: `1px solid ${resultTag.color}44` }}>
+            {resultTag.label}
           </span>
 
           <div className="font-['Bebas_Neue'] text-8xl leading-none tracking-widest"
-            style={{ textShadow: `0 0 60px ${resultBadge.color}44` }}>
-            <span style={{ color: resultBadge.color }}>{myGoals}</span>
+            style={{ textShadow: `0 0 60px ${resultTag.color}44` }}>
+            <span style={{ color: resultTag.color }}>{myGoals}</span>
             <span className="mx-4 text-slate-600 text-6xl">—</span>
             <span className="text-slate-400">{oppGoals}</span>
           </div>

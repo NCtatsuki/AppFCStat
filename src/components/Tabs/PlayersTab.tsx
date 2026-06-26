@@ -40,7 +40,7 @@ function MiniSparkline({ values }: { values: number[] }) {
   );
 }
 
-function RatingBadge({ r }: { r: number }) {
+function RatingTag({ r }: { r: number }) {
   const color = ratingColor(r);
   if (r === 0) return <span style={{ color: "var(--muted)", fontSize: 12 }}>—</span>;
   return (
@@ -152,7 +152,7 @@ function PlayerRow({
               <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: "0.06em", marginTop: 2 }}>{label}</div>
             </div>
           ))}
-          <RatingBadge r={p.rating} />
+          <RatingTag r={p.rating} />
           {sortKey === "score" && (
             <div style={{ textAlign: "center", minWidth: 36 }}>
               <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 15, color: "#ffd700", lineHeight: 1 }}>{score}</div>

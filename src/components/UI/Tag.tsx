@@ -6,7 +6,7 @@ const COLORS: Record<Result, string> = {
   L: "bg-red-500/20 text-red-400 border-red-500/40",
 };
 
-export function Badge({ result }: { result: Result }) {
+export function Tag({ result }: { result: Result }) {
   return (
     <span
       className={`inline-flex items-center justify-center w-7 h-7 rounded text-xs font-bold border ${COLORS[result]}`}

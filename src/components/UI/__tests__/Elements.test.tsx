@@ -1,21 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { Badge } from '../Badge';
+import { Tag } from '../Tag';
 import { Spinner } from '../Spinner';
 
-describe('Badge', () => {
+describe('Tag', () => {
   it('renders W with correct text', () => {
-    render(<Badge result="W" />);
+    render(<Tag result="W" />);
     expect(screen.getByText('W')).toBeInTheDocument();
   });
 
   it('renders D with correct text', () => {
-    render(<Badge result="D" />);
+    render(<Tag result="D" />);
     expect(screen.getByText('D')).toBeInTheDocument();
   });
 
   it('renders L with correct text', () => {
-    render(<Badge result="L" />);
+    render(<Tag result="L" />);
     expect(screen.getByText('L')).toBeInTheDocument();
   });
 });
