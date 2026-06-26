@@ -1,7 +1,7 @@
 import { useRef, useState, useMemo } from "react";
 import {
   Play, Square, Trash2, Archive, Download,
-  Send, Info, X, Tag, FileText, Flag, TrendingUp,
+  Send, Info, X, Tag as TagIcon, FileText, Flag, TrendingUp,
   Merge, AlertTriangle, Layers,
 } from "lucide-react";
 import {
