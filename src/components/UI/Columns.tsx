@@ -1,7 +1,7 @@
-import React from "react";
+import { ReactNode } from "react";
 
 interface ColumnsProps {
-  children: React.ReactNode;
+  children: ReactNode;
   multiline?: boolean;
   align?: "center" | "start" | "end";
   className?: string;

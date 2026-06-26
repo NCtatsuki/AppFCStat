@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAppStore } from "../../store/useAppStore";
 
 import { sendDiscordWebhook } from "../../api/discord";

@@ -1,7 +1,7 @@
-import React from "react";
+import { ReactNode } from "react";
 
 interface BoxProps {
-  children: React.ReactNode;
+  children: ReactNode;
   flat?: boolean;
   className?: string;
 }
