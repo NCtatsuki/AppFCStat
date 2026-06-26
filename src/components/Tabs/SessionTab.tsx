@@ -1096,7 +1096,7 @@ export function SessionTab() {
                     <button onClick={() => setEditingTagsId(isEditingTags ? null : s.id)}
                       className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
                       style={{ color: isEditingTags ? "var(--accent)" : "var(--muted)", background: isEditingTags ? "var(--active)" : "var(--bg)", border: `1px solid ${isEditingTags ? "var(--accent)" : "var(--border)"}` }}>
-                      <Tag size={13} /> Tags
+                      <TagIcon size={13} /> Tags
                     </button>
                     {discordWebhook && (
                       <button onClick={() => shareToDiscord(s)} disabled={sharingId === s.id}
