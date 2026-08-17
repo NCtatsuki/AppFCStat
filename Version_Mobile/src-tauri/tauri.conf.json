@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ProClubsStats",
+  "version": "0.9.30",
+  "identifier": "com.codespace.proclubs-tauri",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "ProClubs Stats",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "decorations": false,
+        "resizable": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://eafc24.content.easports.com; connect-src 'self' https://proclubs.ea.com https://discord.com https://discordapp.com https://github.com https://objects.githubusercontent.com ipc: http://ipc.localhost; worker-src blob:;"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI3NUY5QTY3RTc1RjE3MApSV1J3OFhWK3B2bDFDNVdFUHZERHBvTE9rYjFBQjNHV29ZVjl3YlJNbTdzOERxUGhzcTRsQkhtWAo=",
+      "endpoints": [
+        "https://github.com/NCtatsuki/AppFCStat/releases/latest/download/latest.json"
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "publisher": "Zoran",
+    "shortDescription": "Outil de suivi et statistiques pour ProClubs EA FC",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}
