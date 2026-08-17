@@ -1,68 +1,77 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Minus, Square, X, Wifi, WifiOff } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, Trophy } from "lucide-react";
 import { useAppStore } from "../../store/useAppStore";
+import { getLogo } from "../../api/tauri";
 
-const win = getCurrentWindow();
+function ClubLogo({ crestAssetId, name }: { crestAssetId?: string; name: string }) {
+  const [logo, setLogo] = useState<string | null>(null);
+  useEffect(() => {
+    if (crestAssetId) {
+      getLogo(crestAssetId).then(setLogo).catch(() => {});
+    }
+  }, [crestAssetId]);
 
-export function TitleBar({ showAppBar }: { showAppBar?: boolean }) {
-  const { activeSession, proxyInfo, currentClub } = useAppStore();
   return (
-    <div data-tauri-drag-region="" style={{
-      height: 32, display: "flex", alignItems: "center", justifyContent: "space-between",
-      padding: "0 8px", background: "var(--app-bar-bg)", flexShrink: 0, userSelect: "none",
-    }}>
-      {/* Left: app name + context */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, pointerEvents: "none", paddingLeft: showAppBar ? 52 : 12 }}>
-        <span style={{
-          fontFamily: "'Bebas Neue', sans-serif", fontSize: 13, letterSpacing: "0.15em",
-          color: "var(--muted)",
-        }}>
-          PRO CLUBS STATS
-        </span>
-        {currentClub && (
+    <div className="w-20 h-20 rounded-3xl bg-[#161b22] border-2 border-white/10 flex items-center justify-center shrink-0 overflow-hidden shadow-2xl drop-shadow-2xl">
+      {logo
+        ? <img src={logo} alt="" className="w-full h-full object-contain p-2" />
+        : <span className="font-['Bebas_Neue'] text-4xl text-[var(--accent)]">
+            {(name || "?")[0].toUpperCase()}
+          </span>
+      }
+    </div>
+  );
+}
+
+export function TitleBar() {
+  const { activeSession, currentClub, toggleGlobalSearch } = useAppStore();
+
+  return (
+    <header
+      data-tauri-drag-region=""
+      className="h-32 flex items-center justify-between px-8 bg-[#0d1117]/95 backdrop-blur-xl shrink-0 select-none sticky top-0 z-[var(--z-header)] border-b border-white/10 relative w-full shadow-2xl"
+    >
+      {/* Centered Content with High Visibility */}
+      <div className="flex items-center gap-8 flex-1 justify-center pointer-events-none">
+        {currentClub ? (
           <>
-            <span style={{ color: "var(--border)", fontSize: 10 }}>/</span>
-            <span style={{ fontSize: 12, color: "var(--text)", fontWeight: 600 }}>
-              {currentClub.name}
-            </span>
+            <ClubLogo crestAssetId={currentClub.crestAssetId} name={currentClub.name} />
+            <div className="flex flex-col min-w-0">
+              <div className="text-white font-black text-3xl uppercase tracking-tighter leading-none mb-2 drop-shadow-lg">
+                {currentClub.name}
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-gray-400 font-black uppercase tracking-[0.25em] bg-white/5 px-2 py-0.5 rounded-md">{currentClub.platform}</span>
+                {currentClub.skillRating && (
+                  <div className="flex items-center gap-2 text-yellow-400 text-base font-black bg-yellow-400/10 px-3 py-1 rounded-xl border-2 border-yellow-400/20 shadow-lg">
+                    <Trophy size={16} className="fill-yellow-400/20" /> {currentClub.skillRating} SR
+                  </div>
+                )}
+              </div>
+            </div>
           </>
-        )}
-        {activeSession && (
-          <span style={{
-            fontSize: 9, color: "#fff", display: "flex", alignItems: "center", gap: 4,
-            background: "var(--red)", padding: "1px 6px", borderRadius: 3, fontWeight: 700,
-          }}>
-            <span className="pulse-dot" style={{ width: 6, height: 6 }} />
-            LIVE
+        ) : (
+          <span className="font-['Bebas_Neue'] text-4xl tracking-[0.3em] text-white">
+            PRO CLUBS STATS
           </span>
         )}
-      </div>
 
-      {/* Center: proxy status */}
-      <div style={{ display: "flex", alignItems: "center", gap: 5, pointerEvents: "none" }}>
-        {proxyInfo ? (
-          <div style={{
-            display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: "var(--green)",
-            background: "rgba(35,165,89,0.12)", padding: "2px 7px", borderRadius: 3,
-          }}>
-            <Wifi size={9} /> PROXY
-          </div>
-        ) : (
-          <div style={{
-            display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: "var(--muted)",
-            background: "var(--hover)", padding: "2px 7px", borderRadius: 3,
-          }}>
-            <WifiOff size={9} /> DIRECT
+        {activeSession && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-1.5 rounded-full bg-red-500 border-4 border-[#0d1117] text-[10px] text-white font-black animate-pulse shadow-2xl uppercase tracking-widest">
+            <div className="w-2 h-2 rounded-full bg-white" />
+            Live Session
           </div>
         )}
       </div>
 
-      {/* Right: window controls */}
-      <div style={{ display: "flex", gap: 2 }} className="desktop-only-controls">
-        <button className="win-btn" style={{ width: 24, height: 24 }} onClick={() => win.minimize()}><Minus size={11} /></button>
-        <button className="win-btn" style={{ width: 24, height: 24 }} onClick={() => win.toggleMaximize()}><Square size={9} /></button>
-        <button className="win-btn close-btn" style={{ width: 24, height: 24 }} onClick={() => win.close()}><X size={11} /></button>
-      </div>
-    </div>
+      {/* Large Search Button */}
+      <button
+        onClick={(e) => { e.stopPropagation(); toggleGlobalSearch(); }}
+        className="absolute right-6 flex items-center justify-center w-16 h-16 text-white bg-white/5 active:bg-[var(--accent)] active:text-black rounded-3xl transition-all shadow-2xl border border-white/10"
+        aria-label="Rechercher"
+      >
+        <Search size={32} />
+      </button>
+    </header>
   );
 }

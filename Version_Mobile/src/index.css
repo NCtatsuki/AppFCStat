@@ -848,3 +848,19 @@ input[type="range"]::-webkit-slider-thumb { appearance: none; width: 14px; heigh
   }
 }
 
+/* ─── Responsive Utilities ───────────────────────────────────────────────── */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.snap-x {
+  scroll-snap-type: x mandatory;
+}
+.snap-start {
+  scroll-snap-align: start;
+}
+

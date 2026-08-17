@@ -158,7 +158,6 @@ export function GlobalSearchModal() {
           display: "flex", alignItems: "center", gap: 14,
           padding: "16px 22px", borderBottom: "1px solid var(--border)", flexShrink: 0,
         }}>
-          <Search size={20} style={{ color: "var(--accent)", flexShrink: 0 }} />
           <input
             ref={inputRef}
             value={query}
@@ -170,6 +169,7 @@ export function GlobalSearchModal() {
               color: "var(--text)", fontSize: 19, fontFamily: "inherit",
             }}
           />
+          <Search size={20} style={{ color: "var(--accent)", flexShrink: 0 }} />
           <kbd style={{
             fontSize: 13, color: "var(--muted)", background: "var(--card)",
             border: "1px solid var(--border)", borderRadius: 4, padding: "3px 8px",

@@ -1,286 +1,131 @@
 import { useState } from "react";
-import { Send } from "lucide-react";
+import { X, Trophy, Users, Star } from "lucide-react";
 import { useAppStore } from "../../store/useAppStore";
 import { useT } from "../../i18n";
 import type { Match } from "../../types";
-import { sendDiscordWebhook } from "../../api/discord";
+import { PlayerAvatar } from "./PlayerModal";
 
 export function formatDate(ts: string | number, locale: string) {
   const n = Number(ts) * 1000 || Number(ts);
   const d = new Date(isNaN(n) ? ts : n);
   if (isNaN(d.getTime())) return String(ts);
-  return d.toLocaleDateString(locale, { day: "2-digit", month: "2-digit", year: "numeric" });
+  return d.toLocaleDateString(locale, { day: "2-digit", month: "long" });
 }
 
-function formatDuration(secs?: number) {
-  if (!secs) return "";
-  const m = Math.floor(secs / 60), s = secs % 60;
-  return `${m}min ${s}s`;
-}
-
-interface TeamStat { label: string; my: string | number; opp: string | number }
-
-export function extractTeamStats(match: Match, clubId: string, t: (key: string) => string): TeamStat[] {
-  const myData  = match.clubs[clubId] as Record<string, unknown> | undefined;
-  const oppEntry = Object.entries(match.clubs).find(([k]) => k !== clubId);
-  const oppData = oppEntry?.[1] as Record<string, unknown> | undefined;
-  if (!myData || !oppData) return [];
-
-  const statKeys: [string, string][] = [
-    ["possession", t("matches.possession")],
-    ["shots", t("matches.shots")],
-    ["shotsOnTarget", t("matches.shotsOnTarget")],
-    ["corners", t("matches.corners")],
-    ["passesAttempted", t("matches.passesAttempted")],
-    ["passesCompleted", t("matches.passesCompleted")],
-    ["fouls", t("players.fouls")],
-    ["offsides", t("matches.offsides")],
-    ["tackles", t("players.tackles")],
-  ];
-
-  const stats: TeamStat[] = [];
-  for (const [key, label] of statKeys) {
-    const myVal  = myData[key]  ?? myData[key.toLowerCase()];
-    const oppVal = oppData[key] ?? oppData[key.toLowerCase()];
-    if (myVal !== undefined || oppVal !== undefined) {
-      const fmt = (v: unknown) => {
-        if (v === undefined || v === null) return "—";
-        if (key === "possession") return `${v}%`;
-        return String(v);
-      };
-      stats.push({ label, my: fmt(myVal), opp: fmt(oppVal) });
-    }
-  }
-  return stats;
-}
-
-interface MatchEvent { type: "goal" | "assist" | "card" | "motm"; player: string; detail?: string }
-
-export function extractMatchEvents(match: Match, clubId: string): MatchEvent[] {
-  const clubPlayers = match.players[clubId] as Record<string, Record<string, unknown>> | undefined;
-  if (!clubPlayers) return [];
-
-  const events: MatchEvent[] = [];
-  for (const p of Object.values(clubPlayers)) {
-    const name = String(p["name"] ?? p["playername"] ?? p["playerName"] ?? "—");
-    const goals = Number(p["goals"] ?? 0);
-    for (let i = 0; i < goals; i++) events.push({ type: "goal", player: name });
-    const assists = Number(p["assists"] ?? 0);
-    for (let i = 0; i < assists; i++) events.push({ type: "assist", player: name });
-    const yc = Number(p["yellowCards"] ?? p["yellowcards"] ?? 0);
-    const rc = Number(p["redCards"] ?? p["redcards"] ?? 0);
-    if (yc > 0) events.push({ type: "card", player: name, detail: `yellow:${yc}` });
-    if (rc > 0) events.push({ type: "card", player: name, detail: `red:${rc}` });
-    if (p["mom"] === "1" || p["manofthematch"] === "1") events.push({ type: "motm", player: name });
-  }
-  const order = { goal: 0, assist: 1, card: 2, motm: 3 };
-  events.sort((a, b) => order[a.type] - order[b.type]);
-  return events;
-}
-
-/* ─── Main component ─── */
 export function MatchModal({ match, clubId, onClose }: { match: Match; clubId: string; onClose: () => void }) {
   const t = useT();
   const lang = useAppStore((s) => s.language);
-  const discordWebhook = useAppStore((s) => s.discordWebhook);
-  const addToast = useAppStore((s) => s.addToast);
-  const [sharing, setSharing] = useState(false);
   const locale = lang === "fr" ? "fr-FR" : lang === "es" ? "es-ES" : lang === "de" ? "de-DE" : lang === "pt" ? "pt-BR" : "en-US";
 
   const myData   = match.clubs[clubId] as Record<string, unknown> | undefined;
   const oppEntry = Object.entries(match.clubs).find(([k]) => k !== clubId);
   const oppData  = oppEntry?.[1] as Record<string, unknown> | undefined;
-  const oppDet   = oppData?.["details"] as Record<string, unknown> | undefined;
-  const oppName  = String(oppDet?.["name"] ?? oppData?.["name"] ?? t("matches.opponent"));
+  const oppName  = String(oppData?.["details"]?.["name"] ?? oppData?.["name"] ?? "Adversaire");
 
-  const myPlayers = Object.entries(
-    (match.players[clubId] ?? {}) as Record<string, Record<string, unknown>>
-  ).map(([, p]) => ({
-    name:          String(p["name"] ?? p["playername"] ?? "—"),
-    goals:         Number(p["goals"]   ?? 0),
-    assists:       Number(p["assists"] ?? 0),
-    passes:        Number(p["passesMade"] ?? p["passesmade"] ?? 0),
-    tackles:       Number(p["tacklesMade"] ?? p["tacklesmade"] ?? 0),
-    interceptions: Number(p["interceptions"] ?? 0),
-    fouls:         Number(p["foulsCommited"] ?? p["foulscommited"] ?? 0),
-    yellowCards:   Number(p["yellowCards"] ?? p["yellowcards"] ?? 0),
-    redCards:      Number(p["redCards"] ?? p["redcards"] ?? 0),
-    rating:        Number(p["rating"] ?? p["ratingAve"] ?? 0),
-    motm:          p["mom"] === "1" || p["manofthematch"] === "1",
+  const myPlayers = Object.entries((match.players[clubId] ?? {}) as Record<string, Record<string, unknown>>).map(([, p]) => ({
+    name: String(p["name"] ?? p["playername"] ?? "—"),
+    goals: Number(p["goals"] ?? 0),
+    assists: Number(p["assists"] ?? 0),
+    rating: Number(p["rating"] ?? p["ratingAve"] ?? 0),
+    position: String(p["position"] ?? "ST"),
+    motm: p["mom"] === "1" || p["manofthematch"] === "1",
   })).sort((a, b) => b.rating - a.rating);
 
-  const myGoals  = String(myData?.["goals"]  ?? "?");
-  const oppGoals = String(oppData?.["goals"] ?? "?");
-  const res = myData?.["wins"] === "1" ? "W" : myData?.["losses"] === "1" ? "L" : "D";
-  const isVictory = res === "W";
-  const isDraw = res === "D";
+  const isWin = myData?.["wins"] === "1";
+  const resText = isWin ? "VICTOIRE" : myData?.["losses"] === "1" ? "DÉFAITE" : "NUL";
+  const resColor = isWin ? "text-emerald-400" : myData?.["losses"] === "1" ? "text-rose-500" : "text-yellow-500";
 
-  const events = extractMatchEvents(match, clubId);
-
-  const resultTag = isVictory
-    ? { label: t("match.win").toUpperCase(),  color: "var(--green)" }
-    : isDraw
-    ? { label: t("match.draw").toUpperCase(), color: "var(--gold)" }
-    : { label: t("match.loss").toUpperCase(), color: "var(--red)" };
-
-  const shareToDiscord = async () => {
-    if (!discordWebhook) { addToast(t("discord.noWebhook"), "error"); return; }
-    setSharing(true);
-    try {
-      const color = res === "W" ? 0x23a559 : res === "L" ? 0xda373c : 0xfaa81a;
-      const eventsLine = events.map((ev) => {
-        if (ev.type === "goal")   return `⚽ ${ev.player}`;
-        if (ev.type === "assist") return `🅰️ ${ev.player}`;
-        if (ev.type === "motm" && isVictory) return `★ ${ev.player}`;
-        if (ev.type === "card")   return `${ev.detail?.startsWith("red") ? "🟥" : "🟨"} ${ev.player}`;
-        return "";
-      }).filter(Boolean).join("  ·  ");
-
-      const showTackles = myPlayers.some((p) => p.tackles > 0);
-      const showInterceptions = myPlayers.some((p) => p.interceptions > 0);
-      const col = (s: string, w: number) => s.padEnd(w).slice(0, w);
-      const header = [
-        col("Joueur", 14), col("Note", 5), col("Buts", 5), col("PD", 4), col("Passes", 7),
-        ...(showTackles ? [col("Tack.", 6)] : []),
-        ...(showInterceptions ? [col("Int.", 5)] : []),
-        "MOTM",
-      ].join(" ");
-      const divider = "-".repeat(header.length);
-      const rows = myPlayers.map((p) => [
-        col(p.name, 14), col(p.rating > 0 ? p.rating.toFixed(1) : "—", 5),
-        col(p.goals   > 0 ? String(p.goals)   : "—", 5),
-        col(p.assists > 0 ? String(p.assists) : "—", 4),
-        col(String(p.passes), 7),
-        ...(showTackles       ? [col(p.tackles       > 0 ? String(p.tackles)       : "—", 6)] : []),
-        ...(showInterceptions ? [col(p.interceptions > 0 ? String(p.interceptions) : "—", 5)] : []),
-        p.motm && isVictory ? "★" : "",
-      ].join(" "));
-      const tableBlock = "```\n" + [header, divider, ...rows].join("\n") + "\n```";
-
-      const fields: { name: string; value: string; inline?: boolean }[] = [];
-      if (eventsLine) fields.push({ name: "\u200b", value: eventsLine });
-      fields.push({ name: "JOUEURS", value: tableBlock });
-
-      await sendDiscordWebhook(discordWebhook, [{
-        title: `${myGoals} — ${oppGoals}  ·  vs ${oppName}`,
-        color,
-        description: `${formatDate(match.timestamp, locale)}  **${resultTag.label}**`,
-        fields,
-        footer: { text: "ProClubs Stats" },
-      }]);
-      addToast(t("discord.sent"), "success");
-    } catch (e) { addToast(`Discord: ${String(e)}`, "error"); }
-    finally { setSharing(false); }
-  };
-
-  /* ── helpers pour les joueurs adverses ── */
-  const oppPlayers = Object.entries(
-    (match.players[oppEntry?.[0] ?? ""] ?? {}) as Record<string, Record<string, unknown>>
-  ).map(([, p]) => ({
-    name:        String(p["name"] ?? p["playername"] ?? "—"),
-    goals:       Number(p["goals"]   ?? 0),
-    assists:     Number(p["assists"] ?? 0),
-    passes:      Number(p["passesMade"] ?? p["passesmade"] ?? 0),
-    tackles:     Number(p["tacklesMade"] ?? p["tacklesmade"] ?? 0),
-    interceptions: Number(p["interceptions"] ?? 0),
-    yellowCards: Number(p["yellowCards"] ?? p["yellowcards"] ?? 0),
-    redCards:    Number(p["redCards"] ?? p["redcards"] ?? 0),
-    rating:      Number(p["rating"]  ?? p["ratingAve"] ?? 0),
-    motm:        p["mom"] === "1" || p["manofthematch"] === "1",
-  })).sort((a, b) => b.rating - a.rating);
-
-  const TILE = "rounded-xl bg-[#13151A]/80 backdrop-blur-2xl border border-white/5";
-  const ratingColor = (r: number) => r >= 7.5 ? "#23a559" : r >= 6.5 ? "#f59e0b" : r > 0 ? "#da373c" : "#6b7280";
+  const getRatingColor = (r: number) => r >= 7.5 ? "#00ff87" : r >= 6.5 ? "#eab308" : r > 0 ? "#ff2d55" : "#6b7280";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn" onClick={onClose}>
       <div
-        className={`relative w-full max-w-[900px] max-h-[92vh] overflow-y-auto rounded-2xl shadow-2xl shadow-black/50 ${TILE} border border-white/5`}
-        style={{ animation: "fadeSlideIn 0.15s ease-out" }}
-        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-lg max-h-[82vh] bg-[#0d1117] border border-white/10 rounded-[2.5rem] flex flex-col overflow-hidden shadow-2xl mx-2"
+        onClick={e => e.stopPropagation()}
       >
-        {/* ── Header : score hero ─────────────────────────────── */}
-        <div className="relative px-6 pt-6 pb-5 text-center rounded-t-2xl bg-white/[0.02] border-b border-white/5">
-          <div className="absolute top-4 right-4 flex items-center gap-2">
-            {discordWebhook && (
-              <button onClick={shareToDiscord} disabled={sharing}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-40 bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 cursor-pointer">
-                <Send size={11} /> Discord
-              </button>
-            )}
-            <button onClick={onClose} className="win-btn">✕</button>
+        {/* Header: Titre Centré avec plus de padding */}
+        <div className="relative flex items-center justify-center px-8 h-20 border-b border-white/5 bg-white/[0.02] shrink-0">
+          <div className="flex items-center gap-3 text-white">
+             <Trophy size={18} className="text-gray-500" />
+             <span className="font-['Bebas_Neue'] text-xl tracking-[0.2em] uppercase">Rapport de match</span>
           </div>
-
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-bold tracking-widest mb-3"
-            style={{ background: resultTag.color + "22", color: resultTag.color, border: `1px solid ${resultTag.color}44` }}>
-            {resultTag.label}
-          </span>
-
-          <div className="font-['Bebas_Neue'] text-8xl leading-none tracking-widest"
-            style={{ textShadow: `0 0 60px ${resultTag.color}44` }}>
-            <span style={{ color: resultTag.color }}>{myGoals}</span>
-            <span className="mx-4 text-slate-600 text-6xl">—</span>
-            <span className="text-slate-400">{oppGoals}</span>
-          </div>
-
-          <div className="mt-2 text-base font-semibold text-slate-200">vs {oppName}</div>
-          <div className="mt-0.5 text-xs text-slate-500">
-            {formatDate(match.timestamp, locale)}
-            {match.matchDuration ? ` · ${formatDuration(match.matchDuration)}` : ""}
-          </div>
+          <button onClick={onClose} className="absolute right-5 w-11 h-11 flex items-center justify-center text-gray-500 active:text-white bg-white/5 rounded-full transition-all">
+            <X size={22} />
+          </button>
         </div>
 
-        <div className="p-6 space-y-5">
-          <div className="grid grid-cols-2 gap-4">
+        {/* Content: Augmentation du padding horizontal global */}
+        <div className="flex-1 overflow-y-auto no-scrollbar px-7 py-8 space-y-10">
 
-            {/* Col gauche — mes joueurs */}
-            <div className={`${TILE} p-4 space-y-1.5`}>
-              <p className="text-[9px] font-['Bebas_Neue'] tracking-widest text-slate-400 mb-3">MON ÉQUIPE</p>
-              {myPlayers.length > 0 ? myPlayers.map((p, i) => (
-                <div key={p.name} className={`flex items-center gap-2 px-3 py-2.5 rounded-lg ${p.motm && isVictory ? "bg-amber-500/5 border border-amber-500/20" : "bg-white/[0.025] border border-white/5"}`}>
-                  <span className="font-['Bebas_Neue'] text-xs w-5 text-center text-slate-500">{i+1}</span>
-                  <span className="flex-1 text-sm font-semibold text-slate-100 truncate">{p.name}</span>
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400 flex-shrink-0">
-                    {p.redCards > 0 && <span>🟥</span>}
-                    {p.yellowCards > 0 && <span>🟨</span>}
-                    {p.goals > 0 && <span>⚽{p.goals}</span>}
-                    {p.assists > 0 && <span>🅰️{p.assists}</span>}
-                    {p.passes > 0 && <span className="text-slate-500">{p.passes}p</span>}
-                    {p.tackles > 0 && <span className="text-slate-500">{p.tackles}t</span>}
-                    {p.interceptions > 0 && <span className="text-slate-500">{p.interceptions}i</span>}
-                  </div>
-                  <span className="font-['Bebas_Neue'] text-base leading-none font-bold ml-1" style={{ color: ratingColor(p.rating) }}>
-                    {p.rating > 0 ? p.rating.toFixed(1) : "—"}
-                  </span>
-                  {p.motm && isVictory && <span className="text-amber-400 text-xs flex-shrink-0">★</span>}
-                </div>
-              )) : <p className="text-xs text-slate-500 text-center py-4">—</p>}
+          {/* Score & Meta */}
+          <div className="text-center space-y-5 py-2">
+            <div className="font-['Bebas_Neue'] text-8xl text-white tracking-widest flex items-center justify-center gap-6">
+              <span>{myData?.["goals"] ?? 0}</span>
+              <span className="text-white/10 text-5xl">-</span>
+              <span>{oppData?.["goals"] ?? 0}</span>
             </div>
-
-            {/* Col droite — joueurs adverses */}
-            <div className={`${TILE} p-4 space-y-1.5`}>
-              <p className="text-[9px] font-['Bebas_Neue'] tracking-widest text-slate-400 mb-3">{oppName.toUpperCase()}</p>
-              {oppPlayers.length > 0 ? oppPlayers.map((p, i) => (
-                <div key={p.name} className={`flex items-center gap-2 px-3 py-2.5 rounded-lg ${p.motm ? "bg-amber-500/5 border border-amber-500/20" : "bg-white/[0.025] border border-white/5"}`}>
-                  <span className="font-['Bebas_Neue'] text-xs w-5 text-center text-slate-500">{i+1}</span>
-                  <span className="flex-1 text-sm font-semibold text-slate-300 truncate">{p.name}</span>
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400 flex-shrink-0">
-                    {p.redCards > 0 && <span>🟥</span>}
-                    {p.yellowCards > 0 && <span>🟨</span>}
-                    {p.goals > 0 && <span>⚽{p.goals}</span>}
-                    {p.assists > 0 && <span>🅰️{p.assists}</span>}
-                    {p.passes > 0 && <span className="text-slate-500">{p.passes}p</span>}
-                    {p.tackles > 0 && <span className="text-slate-500">{p.tackles}t</span>}
-                    {p.interceptions > 0 && <span className="text-slate-500">{p.interceptions}i</span>}
-                  </div>
-                  <span className="font-['Bebas_Neue'] text-base leading-none font-bold ml-1" style={{ color: ratingColor(p.rating) }}>
-                    {p.rating > 0 ? p.rating.toFixed(1) : "—"}
-                  </span>
-                  {p.motm && <span className="text-amber-400 text-xs flex-shrink-0">★</span>}
-                </div>
-              )) : <p className="text-xs text-slate-500 text-center py-4">Aucun joueur</p>}
+            <div className="space-y-2">
+               <div className={`font-['Bebas_Neue'] text-4xl tracking-widest ${resColor}`}>{resText}</div>
+               <div className="text-gray-400 text-base font-black uppercase">vs {oppName}</div>
+               <div className="text-gray-600 text-[11px] font-bold uppercase tracking-[0.2em] opacity-60">
+                 {formatDate(match.timestamp, locale)}
+               </div>
             </div>
           </div>
+
+          {/* Joueurs */}
+          <div className="space-y-6">
+             <div className="flex items-center justify-center gap-3 text-gray-500 mb-2">
+               <div className="h-px flex-1 bg-white/5" />
+               <div className="flex items-center gap-2">
+                 <Users size={14} />
+                 <span className="text-[10px] font-black uppercase tracking-[0.2em]">Stats individuelles</span>
+               </div>
+               <div className="h-px flex-1 bg-white/5" />
+             </div>
+
+             <div className="flex flex-col gap-4">
+               {myPlayers.map((p) => (
+                 <div key={p.name} className="flex items-center gap-5 px-6 py-5 bg-[#161b22] border border-white/5 rounded-3xl shadow-xl relative group">
+                    <div className="relative shrink-0">
+                      <PlayerAvatar name={p.name} size={42} />
+                      {p.motm && isWin && (
+                        <div className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-500 rounded-full flex items-center justify-center border-4 border-[#161b22] shadow-lg">
+                          <Star size={10} className="text-black fill-black" />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="text-white font-bold text-lg truncate uppercase tracking-tight leading-none mb-2 group-active:text-[var(--accent)]">
+                        {p.name}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] text-gray-500 font-black uppercase tracking-[0.1em] bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                          {p.position}
+                        </span>
+                        {(p.goals > 0 || p.assists > 0) && (
+                          <div className="flex gap-2 text-[10px] font-black uppercase text-emerald-400">
+                             {p.goals > 0 && <span>⚽ {p.goals}</span>}
+                             {p.assists > 0 && <span className="text-cyan-400">🎯 {p.assists}</span>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Rating: Eloigné du bord droit par un padding interne plus grand */}
+                    <div className="text-right shrink-0 ml-2 pr-4">
+                      <div className="font-['Bebas_Neue'] text-3xl leading-none mb-1" style={{ color: getRatingColor(p.rating) }}>
+                        {p.rating > 0 ? p.rating.toFixed(1) : "—"}
+                      </div>
+                      <div className="text-[9px] text-gray-600 font-black uppercase tracking-widest">Note</div>
+                    </div>
+                 </div>
+               ))}
+             </div>
+          </div>
+
+          <div className="h-6" />
         </div>
       </div>
     </div>

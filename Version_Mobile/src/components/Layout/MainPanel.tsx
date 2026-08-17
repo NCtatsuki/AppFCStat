@@ -1,6 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { BarChart2, Trophy, Search, Sparkles, Settings, Send, Pencil, X, Minimize2, Megaphone, ListChecks, BookOpen, LayoutDashboard, Download, Table2 } from "lucide-react";
-import { GlassCard } from "../UI/GlassCard";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { Search, Sparkles, Settings, X, Trophy, Star, LayoutDashboard } from "lucide-react";
 import { useAppStore } from "../../store/useAppStore";
 import { ClubOverview } from "../Tabs/ClubOverview";
 import { PlayersTab } from "../Tabs/PlayersTab";
@@ -10,223 +9,10 @@ import { SessionTab } from "../Tabs/SessionTab";
 import { SettingsTab } from "../Sidebar/SettingsTab";
 import { ProfilePanel } from "../Modals/ProfilePanel";
 import { Spinner } from "../UI/Spinner";
-import { getLogo } from "../../api/tauri";
-import { sendDiscordWebhook } from "../../api/discord";
-import { buildPlayersEmbed, buildMatchesEmbed, buildChartsEmbed } from "../../utils/discordEmbeds";
-import { MatchAnnounceModal, DiscordPollModal, HighlightModal, SeasonThreadModal, WeeklyRankingModal, SeasonReportModal } from "../Modals/DiscordActionsModals";
+import { getLogo, searchClub as apiSearchClub } from "../../api/tauri";
+import { useClub } from "../../hooks/useClub";
 import { useT } from "../../i18n";
-import type { Club, Match, Player } from "../../types";
-
-// ─── Dashboard widget view ────────────────────────────────────────────────────
-
-const ALL_WIDGETS = [
-  { id: "forme",          label: "Score de forme" },
-  { id: "serie",          label: "Série en cours" },
-  { id: "kpis_rapides",   label: "KPIs rapides" },
-  { id: "derniers_matchs",label: "Derniers matchs" },
-  { id: "top_joueur",     label: "Top joueur" },
-  { id: "heatmap",        label: "Forme 10 matchs" },
-];
-
-function DashboardView({
-  widgets, setWidgets, club, matches, players,
-  formScore, formColor, formLabel, streakText, streakColor,
-}: {
-  widgets: string[];
-  setWidgets: (w: string[]) => void;
-  club: Club;
-  matches: Match[];
-  players: Player[];
-  formScore: number | null;
-  formColor: string;
-  formLabel: string;
-  streakText: string | null;
-  streakColor: string;
-}) {
-  const [editing, setEditing] = useState(false);
-
-  const total   = club.wins + club.losses + club.ties;
-  const winPct  = total > 0 ? Math.round((club.wins / total) * 100) : 0;
-  const topScorer  = [...players].sort((a, b) => b.goals - a.goals)[0];
-  const last5 = [...matches].sort((a, b) => Number(a.timestamp) - Number(b.timestamp)).slice(-5);
-
-  const CARD: React.CSSProperties = {
-    background: "var(--card)",
-    border: "1px solid var(--border)",
-    borderRadius: 8,
-    padding: "14px 16px",
-    display: "flex",
-    flexDirection: "column",
-    gap: 6,
-    position: "relative",
-    overflow: "hidden",
-  };
-  const TITLE: React.CSSProperties = {
-    fontFamily: "'Bebas Neue', sans-serif", fontSize: 11, letterSpacing: "0.1em",
-    color: "var(--muted)", marginBottom: 4,
-  };
-
-  const renderWidget = (id: string) => {
-    switch (id) {
-      case "forme":
-        return formScore !== null ? (
-          <GlassCard key={id} beam glow="cyan"
-            padding="14px 16px"
-            style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={TITLE}>SCORE DE FORME</div>
-            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 42, color: formColor, lineHeight: 1 }}>
-              {formScore}<span style={{ fontSize: 18, opacity: 0.6 }}>/100</span>
-            </div>
-            <div style={{ fontSize: 10, color: formColor, fontWeight: 700 }}>{formLabel}</div>
-          </GlassCard>
-        ) : null;
-
-      case "serie":
-        return streakText ? (
-          <div key={id} style={CARD}>
-            <div style={TITLE}>SÉRIE EN COURS</div>
-            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, color: streakColor, lineHeight: 1 }}>
-              {streakText}
-            </div>
-          </div>
-        ) : null;
-
-      case "kpis_rapides":
-        return (
-          <div key={id} style={CARD}>
-            <div style={TITLE}>KPIs RAPIDES</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-              {[
-                { label: "Matchs", value: total, color: "var(--accent)" },
-                { label: "V%", value: `${winPct}%`, color: "var(--green)" },
-                { label: "Buts", value: club.goals, color: "var(--gold)" },
-                { label: "SR", value: club.skillRating ?? "—", color: "var(--gold)" },
-              ].map(({ label, value, color }) => (
-                <div key={label} style={{ textAlign: "center", background: "var(--bg)", borderRadius: 6, padding: "6px 4px" }}>
-                  <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 20, color, lineHeight: 1 }}>{value}</div>
-                  <div style={{ fontSize: 9, color: "var(--muted)", marginTop: 2 }}>{label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-
-      case "derniers_matchs":
-        return (
-          <div key={id} style={CARD}>
-            <div style={TITLE}>DERNIERS MATCHS</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {last5.length === 0
-                ? <span style={{ fontSize: 11, color: "var(--muted)" }}>Aucun match</span>
-                : last5.map((m, i) => {
-                    const c = m.clubs[club.id] as Record<string, string> | undefined;
-                    const res = !c ? "?" : Number(c.wins) > 0 ? "V" : Number(c.ties) > 0 ? "N" : "D";
-                    const color = res === "V" ? "var(--green)" : res === "D" ? "var(--red)" : "#eab308";
-                    const goals = c?.goals ?? "?";
-                    const ts = Number(m.timestamp);
-                    const date = ts > 0 ? new Date(ts > 1e12 ? ts : ts * 1000).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }) : "";
-                    return (
-                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11 }}>
-                        <span style={{ width: 20, height: 20, borderRadius: 4, background: color,
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          fontFamily: "'Bebas Neue', sans-serif", fontSize: 11, color: "#fff", flexShrink: 0 }}>{res}</span>
-                        <span style={{ color: "var(--text)" }}>{goals} but{Number(goals) !== 1 ? "s" : ""}</span>
-                        <span style={{ color: "var(--muted)", marginLeft: "auto", fontSize: 10 }}>{date}</span>
-                      </div>
-                    );
-                  })}
-            </div>
-          </div>
-        );
-
-      case "top_joueur":
-        return topScorer ? (
-          <div key={id} style={CARD}>
-            <div style={TITLE}>TOP JOUEUR</div>
-            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, color: "var(--text)", lineHeight: 1 }}>
-              {topScorer.name}
-            </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 2 }}>
-              <span style={{ fontSize: 11, color: "var(--accent)" }}>⚽ {topScorer.goals}</span>
-              <span style={{ fontSize: 11, color: "#8b5cf6" }}>🅰️ {topScorer.assists}</span>
-              <span style={{ fontSize: 11, color: "var(--gold)" }}>★ {topScorer.motm}</span>
-              <span style={{ fontSize: 11, color: "var(--muted)" }}>{topScorer.gamesPlayed} MJ</span>
-            </div>
-          </div>
-        ) : null;
-
-      case "heatmap":
-        return (
-          <div key={id} style={CARD}>
-            <div style={TITLE}>FORME (10 MATCHS)</div>
-            <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-              {[...matches]
-                .sort((a, b) => Number(a.timestamp) - Number(b.timestamp))
-                .slice(-10)
-                .map((m, i) => {
-                  const c = m.clubs[club.id] as Record<string, string> | undefined;
-                  const res = !c ? "?" : Number(c.wins) > 0 ? "W" : Number(c.ties) > 0 ? "D" : "L";
-                  return (
-                    <div key={i} title={res === "W" ? "Victoire" : res === "D" ? "Nul" : "Défaite"}
-                      style={{ width: 18, height: 28, borderRadius: 3,
-                        background: res === "W" ? "var(--green)" : res === "D" ? "#eab308" : res === "L" ? "var(--red)" : "var(--border)",
-                        opacity: 0.85 }} />
-                  );
-                })}
-            </div>
-          </div>
-        );
-
-      default:
-        return null;
-    }
-  };
-
-  return (
-    <div style={{ height: "100%", overflowY: "auto", padding: "16px 20px" }}>
-      {/* Widget configurator toggle */}
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-        <button onClick={() => setEditing(v => !v)}
-          style={{ padding: "4px 12px", borderRadius: 5, fontSize: 11, cursor: "pointer",
-            background: editing ? "var(--accent)" : "var(--hover)",
-            border: `1px solid ${editing ? "var(--accent)" : "var(--border)"}`,
-            color: editing ? "#000" : "var(--muted)",
-            fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.06em" }}>
-          {editing ? "FERMER" : "CONFIGURER WIDGETS"}
-        </button>
-      </div>
-
-      {/* Widget picker */}
-      {editing && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16, padding: "12px 14px",
-          background: "var(--hover)", borderRadius: 8, border: "1px solid var(--border)" }}>
-          {ALL_WIDGETS.map(({ id, label }) => {
-            const active = widgets.includes(id);
-            return (
-              <button key={id} onClick={() => {
-                setWidgets(active
-                  ? widgets.length > 1 ? widgets.filter(w => w !== id) : widgets
-                  : [...widgets, id]);
-              }}
-                style={{ padding: "4px 12px", borderRadius: 12, fontSize: 10, cursor: "pointer",
-                  border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
-                  background: active ? "rgba(0,212,255,0.12)" : "transparent",
-                  color: active ? "var(--accent)" : "var(--muted)" }}>
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Widget grid — bento staggered */}
-      <div className="stagger-container"
-        style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
-        {widgets.map(id => renderWidget(id)).filter(Boolean)}
-      </div>
-    </div>
-  );
-}
+import type { Club } from "../../types";
 
 // ─── Settings overlay modal ───────────────────────────────────────────────────
 
@@ -235,615 +21,203 @@ function SettingsOverlay({ onClose, t }: { onClose: () => void; t: (k: string) =
     <div
       role="dialog" aria-modal="true" aria-label={t("settings.title")}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{
-        position: "fixed", inset: 0, zIndex: 1000,
-        background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)",
-        display: "flex", alignItems: "flex-start", justifyContent: "center",
-        padding: "32px 16px", overflowY: "auto",
-      }}>
-      <div style={{
-        width: "100%", maxWidth: 1100,
-        background: "var(--main-bg)", border: "1px solid var(--border)",
-        borderRadius: 12, overflow: "hidden",
-        boxShadow: "0 24px 64px rgba(0,0,0,0.5)",
-      }}>
-        <div style={{
-          height: 48, display: "flex", alignItems: "center", gap: 8,
-          padding: "0 16px", borderBottom: "1px solid var(--border)",
-          background: "var(--surface)", flexShrink: 0,
-        }}>
-          <Settings size={15} style={{ color: "var(--accent)" }} />
-          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.08em" }}>
-            {t("settings.title")}
-          </span>
-          <button onClick={onClose} style={{
-            marginLeft: "auto", background: "transparent", border: "none",
-            cursor: "pointer", color: "var(--muted)", display: "flex", alignItems: "center",
-            padding: 4, borderRadius: 4, transition: "color 0.15s",
-          }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "var(--text)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "var(--muted)"; }}
-            aria-label="Fermer">
-            <X size={16} />
-          </button>
+      className="fixed inset-0 z-[1000] bg-black/95 backdrop-blur-3xl flex flex-col pt-12 animate-fadeIn"
+    >
+      <div className="flex items-center justify-between h-16 px-6 border-b border-white/10 shrink-0">
+        <div className="flex items-center gap-3">
+          <Settings size={20} className="text-[var(--accent)]" />
+          <span className="font-['Bebas_Neue'] text-xl text-white tracking-widest uppercase">{t("settings.title")}</span>
         </div>
+        <button onClick={onClose} className="w-12 h-12 flex items-center justify-center text-gray-400 active:text-white active:bg-white/5 rounded-full transition-all">
+          <X size={28} />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto">
         <SettingsTab />
       </div>
     </div>
   );
 }
 
+// ─── Favorite Club Card ──────────────────────────────────────────────────────
+
+function FavClubCard({ club, onClick }: { club: Club; onClick: () => void }) {
+  const [logo, setLogo] = useState<string | null>(null);
+  useEffect(() => {
+    if (club.crestAssetId) {
+      getLogo(club.crestAssetId).then(setLogo).catch(() => {});
+    }
+  }, [club.crestAssetId]);
+
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-4 p-4 bg-[#161b22] border border-white/5 rounded-2xl active:scale-[0.98] active:border-white/10 transition-all text-left shadow-lg group"
+    >
+      <div className="w-12 h-12 rounded-xl bg-[var(--surface)] border border-white/5 flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
+        {logo ? <img src={logo} alt="" className="w-full h-full object-contain p-1.5" /> : <span className="font-['Bebas_Neue'] text-xl text-[var(--accent)]">{(club.name || "?")[0].toUpperCase()}</span>}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-white font-bold text-base truncate uppercase tracking-tight mb-0.5 group-active:text-[var(--accent)]">{club.name}</div>
+        <div className="flex items-center gap-3">
+          <span className="text-[9px] text-[var(--accent)] font-black uppercase tracking-widest bg-[var(--accent)]/10 px-2 py-0.5 rounded">{club.platform}</span>
+          {club.skillRating && <span className="text-[9px] text-yellow-500 font-bold flex items-center gap-1"><Trophy size={10} /> {club.skillRating} SR</span>}
+        </div>
+      </div>
+      <div className="text-gray-600 opacity-20 group-active:opacity-100 group-active:text-[var(--accent)] transition-all">
+        <Trophy size={18} />
+      </div>
+    </button>
+  );
+}
+
+// ─── Main Panel Component ─────────────────────────────────────────────────────
+
 export function MainPanel() {
   const currentClub       = useAppStore((s) => s.currentClub);
-  const players           = useAppStore((s) => s.players);
-  const matches           = useAppStore((s) => s.matches);
+  const favs              = useAppStore((s) => s.favs);
+  const history           = useAppStore((s) => s.history);
   const activeTab         = useAppStore((s) => s.activeTab);
   const isLoading         = useAppStore((s) => s.isLoading);
   const error             = useAppStore((s) => s.error);
-  const activeSession     = useAppStore((s) => s.activeSession);
   const sidebarTab        = useAppStore((s) => s.sidebarTab);
   const setSidebarTab     = useAppStore((s) => s.setSidebarTab);
-  const discordWebhook    = useAppStore((s) => s.discordWebhook);
-  const addToast          = useAppStore((s) => s.addToast);
-  const visibleKpis       = useAppStore((s) => s.visibleKpis);
-  const setVisibleKpis    = useAppStore((s) => s.setVisibleKpis);
-  const persistSettings   = useAppStore((s) => s.persistSettings);
-  const compactMode       = useAppStore((s) => s.compactMode);
-  const setCompactMode    = useAppStore((s) => s.setCompactMode);
-  const toggleGlobalSearch = useAppStore((s) => s.toggleGlobalSearch);
-  const exportActions     = useAppStore((s) => s.exportActions);
+  const setSearchResults  = useAppStore((s) => s.setSearchResults);
+  const addLog            = useAppStore((s) => s.addLog);
   const t = useT();
-  const [logo, setLogo] = useState<string | null>(null);
-  const [sharing, setSharing] = useState(false);
-  const [editingKpis, setEditingKpis] = useState(false);
-  const [showAnnounce, setShowAnnounce] = useState(false);
-  const [showPoll, setShowPoll] = useState(false);
-  const [showHighlight, setShowHighlight] = useState(false);
-  const [showSeasonThread, setShowSeasonThread] = useState(false);
-  const [showWeeklyRanking, setShowWeeklyRanking] = useState(false);
-  const [showSeasonReport, setShowSeasonReport] = useState(false);
-  const [dashboardMode, setDashboardMode] = useState(false);
-  const [dashWidgets, setDashWidgets] = useState<string[]>(["forme", "serie", "derniers_matchs", "top_joueur", "kpis_rapides", "heatmap"]);
+  const { load } = useClub();
 
-  // Settings modal — intercepte sidebarTab === "settings" pour l'afficher en overlay
+  const [searchQuery, setSearchQuery] = useState("");
+
   const showSettingsModal = sidebarTab === "settings";
   const closeSettings = useCallback(() => setSidebarTab("search"), [setSidebarTab]);
 
-  useEffect(() => {
-    if (!showSettingsModal) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeSettings(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [showSettingsModal, closeSettings]);
-
-  const shareTab = async () => {
-    if (!discordWebhook || !currentClub) return;
-    setSharing(true);
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+    addLog(`Recherche: "${searchQuery}"…`);
     try {
-      let embed;
-      if (activeTab === "players") embed = buildPlayersEmbed(players, currentClub.name);
-      else if (activeTab === "matches") embed = buildMatchesEmbed(matches, currentClub.id, currentClub.name);
-      else embed = buildChartsEmbed(currentClub);
-      await sendDiscordWebhook(discordWebhook, [embed]);
-      addToast("Envoyé sur Discord !", "success");
-    } catch (e) { addToast(`Discord: ${String(e)}`, "error"); }
-    finally { setSharing(false); }
+      const clubs = await apiSearchClub(searchQuery.trim());
+      setSearchResults(clubs, true);
+    } catch (e) { addLog(`Erreur: ${String(e)}`); }
   };
 
-  const TAB_LABELS: Record<string, string> = {
-    club: "Vue Club",
-    players: t("nav.players"),
-    matches: t("nav.matches"),
-    charts: t("nav.charts"),
-    session: t("nav.session"),
-    compare: t("nav.compare"),
-  };
-
-  useEffect(() => {
-    setLogo(null);
-    if (currentClub?.crestAssetId) {
-      getLogo(currentClub.crestAssetId).then(setLogo).catch(() => {});
-    }
-  }, [currentClub?.id]);
-
-  const total  = (currentClub?.wins ?? 0) + (currentClub?.losses ?? 0) + (currentClub?.ties ?? 0);
-  const winPct = total > 0 ? Math.round(((currentClub?.wins ?? 0) / total) * 100) : 0;
-  const goalsPerMatch = total > 0 ? ((currentClub?.goals ?? 0) / total).toFixed(1) : "0.0";
-  const points = (currentClub?.wins ?? 0) * 3 + (currentClub?.ties ?? 0);
-
-  // ── Score de forme (10 derniers matchs) ────────────────────────────
-  const { formScore, formLabel, formColor, streakText, streakColor } = useMemo(() => {
-    if (!currentClub || matches.length === 0) return { formScore: null, formLabel: "", formColor: "var(--muted)", streakText: null, streakColor: "var(--muted)" };
-    const sorted = [...matches].sort((a, b) => Number(a.timestamp) - Number(b.timestamp)).slice(-10);
-    let pts = 0;
-    const results: string[] = [];
-    for (const m of sorted) {
-      const c = m.clubs[currentClub.id] as Record<string, string> | undefined;
-      if (!c) continue;
-      if (Number(c.wins) > 0)   { pts += 3; results.push("W"); }
-      else if (Number(c.ties) > 0) { pts += 1; results.push("D"); }
-      else                       { results.push("L"); }
-    }
-    const maxPts = results.length * 3;
-    const score = maxPts > 0 ? Math.round((pts / maxPts) * 100) : 0;
-    const fColor = score >= 66 ? "var(--green)" : score >= 33 ? "#eab308" : "var(--red)";
-    const fLabel = score >= 66 ? "BONNE FORME" : score >= 33 ? "FORME MOYENNE" : "MAUVAISE FORME";
-    // Streak
-    let streak = 0, sType = "";
-    for (let i = results.length - 1; i >= 0; i--) {
-      if (streak === 0) { sType = results[i]; streak = 1; }
-      else if (results[i] === sType) streak++;
-      else break;
-    }
-    const sEmoji = sType === "W" ? "🔥" : sType === "D" ? "🤝" : "📉";
-    const sColor = sType === "W" ? "var(--green)" : sType === "D" ? "#eab308" : "var(--red)";
-    const sText = streak >= 2 ? `${sEmoji} ${streak} ${sType === "W" ? "V" : sType === "D" ? "N" : "D"} de suite` : null;
-    return { formScore: score, formLabel: fLabel, formColor: fColor, streakText: sText, streakColor: sColor };
-  }, [matches, currentClub]);
-
-  const ALL_KPIS_CATALOG = currentClub ? [
-    { key: "matches",      label: t("main.matches"),      value: total,                color: "var(--accent)", desc: "Victoires + Nuls + Défaites" },
-    { key: "wins",         label: t("main.wins"),         value: currentClub.wins,     color: "var(--green)",  desc: "Nombre de victoires" },
-    { key: "draws",        label: t("main.draws"),        value: currentClub.ties,     color: "var(--gold)",   desc: "Nombre de matchs nuls" },
-    { key: "losses",       label: t("main.losses"),       value: currentClub.losses,   color: "var(--red)",    desc: "Nombre de défaites" },
-    { key: "winRate",      label: t("main.winRate"),      value: `${winPct}%`,          color: "var(--accent)", desc: "Victoires / Total matchs" },
-    { key: "goals",        label: t("main.goals"),        value: currentClub.goals,    color: "var(--gold)",   desc: "Buts marqués au total" },
-    { key: "goalsPerMatch",label: t("main.goalsPerMatch"),value: goalsPerMatch,         color: "var(--gold)",   desc: "Moyenne de buts par match" },
-    { key: "points",       label: t("main.points"),       value: points,               color: "var(--green)",  desc: "V×3 + N×1 (points ligue)" },
-    { key: "forme",        label: "FORME",                value: formScore !== null ? `${formScore}` : "—",  color: formColor, desc: "Score de forme sur 10 matchs (/100)" },
-  ] : [];
-
-  const KPIS = ALL_KPIS_CATALOG.filter(k => visibleKpis.includes(k.key));
+  const recentClubs = useMemo(() => {
+    const all = [...favs];
+    for (const c of history) { if (!all.some(f => f.id === c.id)) all.push(c); }
+    return all.slice(0, 6);
+  }, [favs, history]);
 
   // ── Profile settings page ─────────────────────────────────────────
   if (sidebarTab === "profile") {
     return (
-      <>
-      <main id="main-content" style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--main-bg)" }}
-        role="main" aria-label="Paramètres profil">
-        <div style={{
-          height: 48, display: "flex", alignItems: "center", gap: 8,
-          padding: "0 16px", borderBottom: "1px solid rgba(0,0,0,0.24)",
-          flexShrink: 0, background: "var(--main-bg)",
-        }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>Paramètres profil</span>
+      <div className="flex-1 flex flex-col h-full bg-[var(--main-bg)] overflow-hidden">
+        {/* Dynamic StatusBar Spacer for Mobile Accessibility */}
+        <div className="h-12 shrink-0 w-full" />
+
+        <div className="h-16 flex items-center px-6 border-b border-white/10 shrink-0 bg-[#0d1117]/80 backdrop-blur-md">
+          <span className="font-['Bebas_Neue'] text-xl text-white tracking-widest uppercase">Mon Profil</span>
         </div>
-        <ProfilePanel />
-      </main>
-      {showSettingsModal && <SettingsOverlay onClose={closeSettings} t={t} />}
-      </>
+        <div className="flex-1 overflow-y-auto">
+          <ProfilePanel />
+        </div>
+        {showSettingsModal && <SettingsOverlay onClose={closeSettings} t={t} />}
+      </div>
     );
   }
 
-  // ── Club loaded ────────────────────────────────────────────────────
   return (
-    <>
-    <main id="main-content" style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--main-bg)" }}
-      role="main" aria-label={TAB_LABELS[activeTab] || t("nav.players")}>
+    <div className="flex-1 flex flex-col h-full relative overflow-hidden">
 
-      {/* ── Header contextuel ─────────────────────────────────────────── */}
-      <div style={{
-        height: 44,
-        display: "flex", alignItems: "center", gap: 8,
-        padding: "0 16px",
-        borderBottom: "1px solid var(--border)",
-        flexShrink: 0,
-        background: "var(--surface)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
-        position: "sticky", top: 0,
-        zIndex: "var(--z-header)" as unknown as number,
-      }}>
-        {currentClub && <div className="refresh-bar" aria-hidden="true" />}
-        {/* Search — gauche */}
-        <button onClick={toggleGlobalSearch} title="Recherche globale (Ctrl+K)"
-          style={{
-            display: "flex", alignItems: "center", gap: 6,
-            padding: "5px 10px", background: "var(--hover)", border: "1px solid var(--border)",
-            borderRadius: 6, color: "var(--muted)", fontSize: 11, cursor: "pointer", flex: 1, maxWidth: 200,
-          }}>
-          <Search size={12} />
-          <span style={{ opacity: 0.6 }}>Rechercher…</span>
-          <kbd style={{ marginLeft: "auto", fontSize: 9, opacity: 0.5, background: "var(--card)", padding: "1px 4px", borderRadius: 3 }}>Ctrl+K</kbd>
-        </button>
-        {/* Vue buttons — droite */}
-        {currentClub && (
-          <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
-            <button onClick={() => setDashboardMode(v => !v)}
-              style={{
-                display: "flex", alignItems: "center", gap: 5,
-                padding: "5px 10px",
-                background: dashboardMode ? "rgba(var(--accent-rgb,59,130,246),0.12)" : "var(--hover)",
-                border: `1px solid ${dashboardMode ? "var(--accent)" : "var(--border)"}`,
-                borderRadius: 6, color: dashboardMode ? "var(--accent)" : "var(--muted)",
-                fontSize: 10, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.08em",
-                fontWeight: 700, cursor: "pointer", transition: "all 0.15s",
-              }}>
-              <LayoutDashboard size={11} /> VUE DASHBOARD
-            </button>
-            <button onClick={() => setCompactMode(!compactMode)}
-              style={{
-                display: "flex", alignItems: "center", gap: 5,
-                padding: "5px 10px",
-                background: compactMode ? "rgba(var(--accent-rgb,59,130,246),0.12)" : "var(--hover)",
-                border: `1px solid ${compactMode ? "var(--accent)" : "var(--border)"}`,
-                borderRadius: 6, color: compactMode ? "var(--accent)" : "var(--muted)",
-                fontSize: 10, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.08em",
-                fontWeight: 700, cursor: "pointer", transition: "all 0.15s",
-              }}>
-              <Minimize2 size={11} /> VUE COMPACTE
-            </button>
+      {isLoading && (
+        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-lg" role="status">
+          <div className="flex flex-col items-center gap-5">
+            <Spinner size={56} />
+            <span className="font-['Bebas_Neue'] text-2xl tracking-[0.3em] text-[var(--accent)] animate-pulse">CHARGEMENT...</span>
           </div>
-        )}
-      </div>
-
-      {/* ── Club banner ─────────────────────────────────────────── */}
-      {currentClub && (
-        <div style={{
-          display: "flex", alignItems: "center", gap: 14, padding: "14px 20px",
-          background: "var(--hover)", flexShrink: 0,
-        }}>
-          {/* Left accent bar */}
-          <div style={{ width: 4, alignSelf: "stretch", background: "var(--accent)", borderRadius: 2, flexShrink: 0 }} />
-          {/* Logo */}
-          <div style={{
-            width: 52, height: 52, borderRadius: 12,
-            background: "var(--surface)", border: "1px solid var(--border)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0, overflow: "hidden",
-          }}>
-            {logo
-              ? <img src={logo} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-              : <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, color: "var(--accent)" }}>
-                  {(currentClub.name || "?")[0].toUpperCase()}
-                </span>
-            }
-          </div>
-          {/* Name + meta */}
-          <div style={{ flex: 1 }}>
-            <div style={{
-              fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, color: "var(--text)",
-              letterSpacing: "0.04em", lineHeight: 1,
-            }}>
-              {currentClub.name || `Club #${currentClub.id}`}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-              <span style={{ fontSize: 11, color: "var(--accent)", fontWeight: 600 }}>
-                {currentClub.platform.toUpperCase()}
-              </span>
-              {currentClub.skillRating && (
-                <>
-                  <span style={{ color: "var(--border)" }}>·</span>
-                  <span style={{ fontSize: 11, color: "var(--gold)", fontWeight: 600 }}>
-                    ★ {currentClub.skillRating} SR
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-          {/* Forme + Série */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, marginLeft: "auto" }}>
-            {formScore !== null && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <div style={{ display: "flex", gap: 2 }}>
-                  {[...matches]
-                    .sort((a, b) => Number(a.timestamp) - Number(b.timestamp))
-                    .slice(-10)
-                    .map((m, i) => {
-                      const c = m.clubs[currentClub!.id] as Record<string, string> | undefined;
-                      const res = !c ? "?" : Number(c.wins) > 0 ? "W" : Number(c.ties) > 0 ? "D" : "L";
-                      return (
-                        <div key={i} title={res === "W" ? "Victoire" : res === "D" ? "Nul" : "Défaite"}
-                          style={{ width: 6, height: 16, borderRadius: 2,
-                            background: res === "W" ? "var(--green)" : res === "D" ? "#eab308" : res === "L" ? "var(--red)" : "var(--border)",
-                            opacity: 0.85 }} />
-                      );
-                    })}
-                </div>
-                <span style={{ fontSize: 10, color: formColor, fontWeight: 700, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.04em" }}>
-                  {formScore}/100
-                </span>
-              </div>
-            )}
-            {streakText && (
-              <span style={{ fontSize: 10, color: streakColor, fontWeight: 700 }}>{streakText}</span>
-            )}
-          </div>
-          {/* Export buttons */}
-          {exportActions && (
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              {exportActions.png && (
-                <button onClick={exportActions.png} title="Exporter en PNG"
-                  style={{
-                    display: "flex", alignItems: "center", gap: 4,
-                    padding: "4px 8px", background: "rgba(0,242,255,0.08)",
-                    border: "1px solid rgba(0,242,255,0.2)", borderRadius: 5,
-                    color: "var(--accent)", fontSize: 10, cursor: "pointer",
-                    fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.06em",
-                    transition: "all 0.15s",
-                  }}>
-                  <Download size={11} /> PNG
-                </button>
-              )}
-              {exportActions.csv && (
-                <button onClick={exportActions.csv} title="Exporter en CSV"
-                  style={{
-                    display: "flex", alignItems: "center", gap: 4,
-                    padding: "4px 8px", background: "var(--hover)",
-                    border: "1px solid var(--border)", borderRadius: 5,
-                    color: "var(--muted)", fontSize: 10, cursor: "pointer",
-                    fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.06em",
-                    transition: "all 0.15s",
-                  }}>
-                  <Download size={11} /> CSV
-                </button>
-              )}
-              {exportActions.xls && (
-                <button onClick={exportActions.xls} title="Exporter en Excel"
-                  style={{
-                    display: "flex", alignItems: "center", gap: 4,
-                    padding: "4px 8px", background: "var(--hover)",
-                    border: "1px solid var(--border)", borderRadius: 5,
-                    color: "var(--muted)", fontSize: 10, cursor: "pointer",
-                    fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.06em",
-                    transition: "all 0.15s",
-                  }}>
-                  <Table2 size={11} /> XLS
-                </button>
-              )}
-            </div>
-          )}
-          {/* Actions Discord */}
-          {discordWebhook && (
-            <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 8 }}>
-              {["players", "matches", "charts"].includes(activeTab) && (
-                <button onClick={shareTab} disabled={sharing} title="Partager sur Discord"
-                  style={{
-                    display: "flex", alignItems: "center", gap: 4,
-                    padding: "4px 8px", background: "rgba(0,242,255,0.08)",
-                    border: "1px solid rgba(0,242,255,0.2)", borderRadius: 5,
-                    color: sharing ? "var(--muted)" : "var(--accent)", fontSize: 10, cursor: sharing ? "default" : "pointer",
-                    opacity: sharing ? 0.6 : 1, transition: "all 0.15s",
-                    fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.06em",
-                  }}>
-                  <Send size={11} /> PARTAGER
-                </button>
-              )}
-              {[
-                { icon: <Megaphone size={11} />, action: () => setShowAnnounce(true), title: "Annonce pré-match" },
-                { icon: <ListChecks size={11} />, action: () => setShowPoll(true), title: "Sondage Discord" },
-                { icon: <Sparkles size={11} />, action: () => setShowHighlight(true), title: "Moment fort" },
-                { icon: <BookOpen size={11} />, action: () => setShowSeasonThread(true), title: "Thread saison" },
-                { icon: <Trophy size={11} />, action: () => setShowWeeklyRanking(true), title: "Classement semaine" },
-                { icon: <BarChart2 size={11} />, action: () => setShowSeasonReport(true), title: "Rapport de saison" },
-              ].map(({ icon, action, title }) => (
-                <button key={title} onClick={action} title={title}
-                  style={{
-                    display: "flex", alignItems: "center", padding: "4px 6px",
-                    background: "var(--hover)", border: "1px solid var(--border)",
-                    borderRadius: 5, color: "var(--muted)", cursor: "pointer", fontSize: 11,
-                    transition: "all 0.15s",
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "var(--accent)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--accent)"; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "var(--muted)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border)"; }}>
-                  {icon}
-                </button>
-              ))}
-            </div>
-          )}
-          {/* Settings button */}
-          <button onClick={() => setSidebarTab("settings")} title="Paramètres"
-            style={{
-              display: "flex", alignItems: "center", padding: "5px 6px",
-              background: "transparent", border: "1px solid var(--border)",
-              borderRadius: 6, color: "var(--muted)", cursor: "pointer", transition: "all 0.15s",
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "var(--accent)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--accent)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "var(--muted)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border)"; }}>
-            <Settings size={13} />
-          </button>
-          {/* LIVE badge */}
-          {activeSession && (
-            <span style={{
-              fontSize: 11, color: "#fff", background: "var(--red)",
-              padding: "4px 10px", borderRadius: 4, fontWeight: 700,
-              display: "flex", alignItems: "center", gap: 5,
-            }} role="status">
-              <span className="pulse-dot" style={{ width: 7, height: 7 }} />
-              LIVE
-            </span>
-          )}
         </div>
       )}
 
-      {/* ── KPI cards ─────────────────────────────────────────────── */}
-      {currentClub && (
-        <div style={{ position: "relative", flexShrink: 0 }}>
-          <div style={{
-            display: "flex", alignItems: "stretch", gap: 8, padding: "12px 16px",
-            borderBottom: "1px solid rgba(0,0,0,0.12)",
-          }} role="group" aria-label="KPIs">
-            {KPIS.map(({ key, label, value, color }) => (
-              <div key={key} className="hover-lift" style={{
-                flex: 1, background: "var(--hover)", borderRadius: 8,
-                padding: "10px 12px", textAlign: "center", cursor: "default",
-              }}>
-                <div className="kpi-value" style={{
-                  fontFamily: "'Bebas Neue', sans-serif", fontSize: 24,
-                  color, lineHeight: 1,
-                }}>{value}</div>
-                <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: "0.06em", marginTop: 4, fontWeight: 600 }}>
-                  {label}
-                </div>
-              </div>
-            ))}
-            {/* Bouton Éditer */}
-            <button
-              onClick={() => setEditingKpis(v => !v)}
-              title={t("main.editKpis")}
-              style={{
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                gap: 4, padding: "8px 10px", background: editingKpis ? "var(--accent)" : "var(--hover)",
-                border: `1px solid ${editingKpis ? "var(--accent)" : "var(--border)"}`,
-                borderRadius: 8, cursor: "pointer", color: editingKpis ? "#fff" : "var(--muted)",
-                transition: "all 0.15s", flexShrink: 0, minWidth: 40,
-              }}
-              onMouseEnter={(e) => { if (!editingKpis) { e.currentTarget.style.color = "var(--text)"; e.currentTarget.style.borderColor = "var(--accent)"; } }}
-              onMouseLeave={(e) => { if (!editingKpis) { e.currentTarget.style.color = "var(--muted)"; e.currentTarget.style.borderColor = "var(--border)"; } }}
-            >
-              <Pencil size={13} />
-              <span style={{ fontSize: 8, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.06em" }}>
-                {t("main.editKpis")}
-              </span>
-            </button>
-          </div>
-
-          {/* ── Panel éditeur KPI ─────────────────────────────────── */}
-          {editingKpis && (
-            <div
-              style={{
-                position: "absolute", top: "calc(100% - 1px)", right: 0, zIndex: 200,
-                background: "var(--surface)", border: "1px solid var(--border)",
-                borderRadius: "0 0 10px 10px", padding: "14px 16px", width: 260,
-                boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
-              }}
-            >
-              {/* Header */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 14, letterSpacing: "0.08em", color: "var(--accent)" }}>
-                  {t("main.kpiPanelTitle")}
-                </span>
-                <button
-                  onClick={() => setEditingKpis(false)}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = "var(--muted)"; }}
-                >
-                  <X size={14} />
-                </button>
-              </div>
-
-              {/* Liste des KPIs */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {ALL_KPIS_CATALOG.map(kpi => {
-                  const active = visibleKpis.includes(kpi.key);
-                  return (
-                    <label
-                      key={kpi.key}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 10, cursor: "pointer",
-                        padding: "7px 10px", borderRadius: 6, transition: "background 0.1s",
-                        background: active ? "rgba(var(--accent-rgb, 0,212,255), 0.08)" : "transparent",
-                        border: `1px solid ${active ? "rgba(var(--accent-rgb, 0,212,255), 0.2)" : "transparent"}`,
-                      }}
-                    >
-                      {/* Checkbox custom */}
-                      <div
-                        style={{
-                          width: 16, height: 16, borderRadius: 4, flexShrink: 0,
-                          border: `2px solid ${active ? "var(--accent)" : "var(--border)"}`,
-                          background: active ? "var(--accent)" : "transparent",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          transition: "all 0.15s",
-                        }}
-                        onClick={() => {
-                          let next: string[];
-                          if (active) {
-                            if (visibleKpis.length <= 1) return;
-                            next = visibleKpis.filter(k => k !== kpi.key);
-                          } else {
-                            next = [...visibleKpis, kpi.key];
-                          }
-                          setVisibleKpis(next);
-                          persistSettings();
-                        }}
-                      >
-                        {active && (
-                          <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
-                            <path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        )}
-                      </div>
-                      <div style={{ flex: 1, pointerEvents: "none" }}>
-                        <div style={{ fontSize: 12, fontFamily: "'Bebas Neue', sans-serif", color: kpi.color, letterSpacing: "0.05em" }}>
-                          {kpi.label}
-                        </div>
-                        <div style={{ fontSize: 9, color: "var(--muted)", marginTop: 1 }}>
-                          {kpi.desc}
-                        </div>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+      {error && (
+        <div className="absolute top-6 left-6 right-6 z-[110] bg-red-500/95 text-white p-4 rounded-2xl flex items-center gap-3 shadow-2xl animate-bounce" role="alert">
+          <X size={20} className="shrink-0" />
+          <span className="text-sm font-bold truncate leading-none">{error}</span>
         </div>
       )}
 
-      {/* ── Content ───────────────────────────────────────────────── */}
-      <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
-        {isLoading && (
-          <div style={{
-            position: "absolute", inset: 0, zIndex: 10,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)",
-          }} role="status" aria-label={t("misc.loading")}>
-            <Spinner size={40} />
-          </div>
-        )}
-        {error && (
-          <div style={{
-            position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)",
-            zIndex: 10, background: "rgba(218,55,60,0.9)", color: "#fff",
-            padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 500,
-          }} role="alert">
-            {error}
-          </div>
-        )}
-
+      <div className="flex-1 flex flex-col overflow-hidden">
         {!currentClub && !isLoading ? (
-          <div style={{
-            display: "flex", flexDirection: "column", alignItems: "center",
-            justifyContent: "center", height: "100%", color: "var(--muted)", gap: 16,
-          }}>
-            <BarChart2 size={56} style={{ opacity: 0.3 }} aria-hidden="true" />
-            <p style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 20, letterSpacing: "0.1em", opacity: 0.5 }}>
-              {t("main.searchToStart")}
-            </p>
+          <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 h-full overflow-y-auto no-scrollbar">
+            <div className="w-full max-w-sm flex flex-col items-center justify-center animate-fadeInScale min-h-full">
+              {/* Logo / Hero */}
+              <div className="flex flex-col items-center gap-10 text-center mb-16 w-full">
+                <div className="w-28 h-28 rounded-[2.5rem] bg-[#161b22] border border-white/10 flex items-center justify-center shadow-2xl relative rotate-3 hover:rotate-0 transition-transform duration-500">
+                  <Sparkles size={56} className="text-[var(--accent)] opacity-90 animate-pulse" />
+                  <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-[var(--accent)] rounded-xl flex items-center justify-center shadow-xl border-4 border-[#0d1117]">
+                    <Trophy size={20} className="text-black" />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="font-['Bebas_Neue'] text-7xl text-white tracking-tighter uppercase leading-none drop-shadow-lg">ProStatsClub</h3>
+                  <div className="h-1 w-32 bg-[var(--accent)] mx-auto rounded-full opacity-50" />
+                  <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em] opacity-80">Mobile Performance Engine</p>
+                </div>
+
+                <div className="w-full space-y-6 my-10">
+                  <div className="relative group">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                      placeholder="RECHERCHER UN CLUB..."
+                      className="w-full h-16 bg-[#161b22] border border-white/10 rounded-2xl pl-6 pr-16 text-white font-bold text-lg tracking-widest outline-none focus:border-[var(--accent)]/50 focus:bg-white/[0.04] transition-all uppercase placeholder:text-gray-700 shadow-2xl"
+                    />
+                    <Search size={22} className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-[var(--accent)] transition-colors z-10" />
+                  </div>
+                  <button
+                    onClick={handleSearch}
+                    className="w-full h-16 bg-[var(--accent)] text-black font-['Bebas_Neue'] text-2xl tracking-[0.3em] rounded-2xl active:scale-[0.96] transition-all shadow-xl shadow-[var(--accent)]/20 uppercase"
+                  >
+                    DÉMARRER
+                  </button>
+                </div>
+              </div>
+
+              {/* Favorites Section */}
+              {recentClubs.length > 0 && (
+                <div className="w-full space-y-8 pt-10 border-t-2 border-white/5">
+                  <div className="flex items-center justify-between px-2">
+                    <div className="flex items-center gap-2.5">
+                      <Star size={18} className="text-yellow-500 fill-yellow-500/20" />
+                      <h4 className="font-['Bebas_Neue'] text-2xl text-white tracking-widest uppercase">Favoris</h4>
+                    </div>
+                    <div className="h-px flex-1 bg-white/5 mx-4" />
+                    <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest">{recentClubs.length}</span>
+                  </div>
+                  <div className="flex flex-col gap-5">
+                    {recentClubs.map(club => (
+                      <FavClubCard key={club.id} club={club} onClick={() => load(club.id, club.platform)} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        ) : dashboardMode && currentClub ? (
-          <DashboardView
-            widgets={dashWidgets}
-            setWidgets={setDashWidgets}
-            club={currentClub}
-            matches={matches}
-            players={players}
-            formScore={formScore}
-            formColor={formColor}
-            formLabel={formLabel}
-            streakText={streakText}
-            streakColor={streakColor}
-          />
         ) : (
-          <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-            {activeTab === "club"    && <div className="tab-content" style={{ height: "100%", display: "flex", flexDirection: "column" }}><ClubOverview /></div>}
-            {activeTab === "players" && <div className="tab-content" style={{ height: "100%", display: "flex", flexDirection: "column" }}><PlayersTab /></div>}
-            {activeTab === "matches" && <div className="tab-content" style={{ height: "100%", display: "flex", flexDirection: "column" }}><MatchesTab /></div>}
-            {activeTab === "charts"  && <div className="tab-content" style={{ height: "100%", display: "flex", flexDirection: "column" }}><ChartsTab /></div>}
-            {activeTab === "session" && <div className="tab-content" style={{ height: "100%", display: "flex", flexDirection: "column" }}><SessionTab /></div>}
+          <div className="flex-1 flex flex-col animate-fadeIn w-full h-full overflow-y-auto no-scrollbar">
+            <div className="w-full max-w-xl mx-auto flex flex-col min-h-full">
+              {activeTab === "club"        && <ClubOverview />}
+              {activeTab === "players"     && <PlayersTab />}
+              {activeTab === "matches"     && <MatchesTab />}
+              {activeTab === "charts"      && <ChartsTab />}
+              {activeTab === "session"     && <SessionTab />}
+            </div>
           </div>
         )}
       </div>
-    </main>
-    {showAnnounce     && <MatchAnnounceModal  onClose={() => setShowAnnounce(false)} />}
-    {showPoll         && <DiscordPollModal    onClose={() => setShowPoll(false)} />}
-    {showHighlight    && <HighlightModal      onClose={() => setShowHighlight(false)} />}
-    {showSeasonThread && <SeasonThreadModal   onClose={() => setShowSeasonThread(false)} />}
-    {showWeeklyRanking && <WeeklyRankingModal onClose={() => setShowWeeklyRanking(false)} />}
-    {showSeasonReport && <SeasonReportModal   onClose={() => setShowSeasonReport(false)} />}
 
-    {showSettingsModal && <SettingsOverlay onClose={closeSettings} t={t} />}
-</>
+      {showSettingsModal && <SettingsOverlay onClose={closeSettings} t={t} />}
+    </div>
   );
 }

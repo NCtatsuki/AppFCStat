@@ -31,7 +31,7 @@ export default defineConfig(async () => ({
   server: {
     port: 1420,
     strictPort: true,
-    host: host || false,
+    host: "0.0.0.0", // Écoute sur toutes les interfaces pour une détection plus rapide
     hmr: host
       ? {
           protocol: "ws",
